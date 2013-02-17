@@ -1,6 +1,5 @@
 use RankBall;
 use Getopt::Long;
-use List::Util qw( reduce );
 
 my $polls  = 1;
 my $powers = 1;
