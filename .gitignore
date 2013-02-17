@@ -1,0 +1,18 @@
+.includepath
+.project
+.build
+RankBall-*
+MANIFEST
+MANIFEST.bak
+META.*
+MYMETA.*
+Makefile
+Makefile.old
+blib/
+pm_to_blib
+Distar/
+.tidyall.d/
+
+# yes that's right, distar makes it for us
+MANIFEST.SKIP
+
