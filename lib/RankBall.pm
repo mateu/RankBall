@@ -4,13 +4,22 @@ use WWW::Mechanize;
 use HTML::TreeBuilder;
 use HTML::TreeBuilder::Select;
 use HTML::TableExtract;
+use List::Util qw( reduce );
+
 use Data::Dumper::Concise;
-use DDP colored => 0;
 
 has mech => (
     is      => 'ro',
     lazy    => 1,
     default => sub { WWW::Mechanize->new },
+);
+has polls => (
+    is => 'ro',
+    default => sub {1},
+);
+has powers => (
+    is => 'ro',
+    default => sub {1},
 );
 
 sub get_pomeroy_ranks {
@@ -86,12 +95,47 @@ sub get_ranks {
             $team =~ s/^\s*//;
             next if (not ($team or $rank));
             ($rank) = $rank =~ m/(\d+)/;
-            die "row: ", Dumper $row if not $team;
             $team = $self->canonicalize_team($team);
             $rank_for{$team} = $rank;
         }
     }
     return %rank_for;
+}
+
+sub sum_ranks {
+    my ($self, ) = @_;
+    my %s   = $self->get_sagarin_ranks;
+    my %p   = $self->get_pomeroy_ranks;
+    my %c   = $self->get_ranks('coaches');
+    my %ap  = $self->get_ranks('ap');
+    my %rpi = $self->get_ranks('rpi');
+    
+    # Lets use the teams that are in both the Coaches and AP top 25 poll.
+    my @teams_in_all = grep { $c{$_} and $ap{$_} } keys %s;
+    my %sum;
+    foreach my $team (@teams_in_all) {
+        my @sources;
+        if ($self->polls) {
+            push @sources, \%c, \%ap;
+        }
+        if ($self->powers) {
+            push @sources, \%s, \%p, \%rpi;
+        }
+        my @ranks = map { $_->{$team} } @sources;
+        $sum{$team} = reduce { $a + $b } @ranks;
+    }
+    return %sum;
+}
+
+sub report_ranks {
+    my ($self, ) = @_;
+    my %sum = $self->sum_ranks; 
+    my $position = 1;
+    print "Position,Team,Rank Sum\n";
+    foreach my $team (sort { $sum{$a} <=> $sum{$b} } keys %sum) {
+        print "$position,$team,$sum{$team}\n";
+        $position++;
+    }
 }
 
 sub canonicalize_team {
