@@ -5,8 +5,14 @@ use HTML::TreeBuilder;
 use HTML::TreeBuilder::Select;
 use HTML::TableExtract;
 use List::Util qw( reduce );
-
+use CHI;
 use Data::Dumper::Concise;
+
+has cache => (
+    is => 'ro',
+    lazy => 1,
+    default => sub { CHI->new( driver => 'File', root_dir => '/tmp') },
+);
 
 has mech => (
     is      => 'ro',
@@ -34,10 +40,17 @@ has rpi => (
 sub pomeroy_ranks {
     my ($self,) = @_;
 
+    my $source = 'pomeroy';
     my $url = 'http://kenpom.com';
-    $self->mech->get($url);
+    my $content = $self->cache->get($source);
+    if (not $content) {
+        warn "Getting content from ${source}";
+        $self->mech->get($url);
+        $content = $self->mech->content;
+        $self->cache->set($source, $content, "1 hour");
+    } 
     my $te = HTML::TableExtract->new(headers => [ 'Rank', 'Team', ],);
-    $te->parse($self->mech->content);
+    $te->parse($content);
 
     my %pomeroy_rank_for;
     foreach my $table ($te->tables) {
@@ -56,10 +69,17 @@ sub pomeroy_ranks {
 sub sagarin_ranks {
     my ($self,) = @_;
 
+    my $source = 'sagarin'; 
     my $url = 'http://usatoday30.usatoday.com/sports/sagarin/bkt1213.htm';
-    $self->mech->get($url);
+    my $content = $self->cache->get($source);
+    if (not $content) {
+        warn "Getting content from ${source}";
+        $self->mech->get($url);
+        $content = $self->mech->content;
+        $self->cache->set($source, $content, "1 hour");
+    } 
     my $tree = HTML::TreeBuilder->new;
-    $tree->parse_content($self->mech->content);
+    $tree->parse_content($content);
     my ($header, $data) = $tree->select("pre");
     my $text = $data->as_text;
     my @lines = split(/\r?\n/, $text);
@@ -118,11 +138,12 @@ sub generic_ranks {
         'ap'      => 'http://www.usatoday.com/sports/ncaab/polls/ap',
         'rpi'     => 'http://rivals.yahoo.com/ncaa/basketball/polls?poll=5',
     );
-    my $content = $self->$poll;
+    my $content = $self->cache->get($poll);
     if (not $content) {
+        warn "Getting content from ${poll}";
         $self->mech->get($url_for{$poll});
         $content = $self->mech->content;
-        $self->$poll($content);
+        $self->cache->set($poll, $content, "1 hour");
     } 
     my $te = HTML::TableExtract->new(headers => [ 'Rank', 'Team', ],);
     $te->parse($content);
