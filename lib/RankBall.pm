@@ -89,7 +89,9 @@ sub rankings {
 }
 
 # If a team is in both the AP and Coaches poll then it's in all of them.
-sub teams_in_all {
+# These are the teams to consider, TODO: Ideally it should depend on the list
+# of ranking sources we are to consider.
+sub all_teams {
     my ($self, ) = @_;
     my %rd = $self->rank_dispatcher;
     my $ap = $rd{ap}->();
@@ -155,7 +157,7 @@ sub all_ranks {
        $wanted_rankings{$ranking} = $rd{$ranking}->();
     }
     my %all;
-    foreach my $team ($self->teams_in_all) {
+    foreach my $team ($self->all_teams) {
         foreach my $ranking (keys %wanted_rankings) {
             $all{$team}->{$ranking} = $wanted_rankings{$ranking}->{$team}; 
         }
