@@ -21,8 +21,17 @@ has powers => (
     is => 'ro',
     default => sub {1},
 );
+has ap => (
+    is => 'rw',
+);
+has coaches => (
+    is => 'rw',
+);
+has rpi => (
+    is => 'rw',
+);
 
-sub get_pomeroy_ranks {
+sub pomeroy_ranks {
     my ($self,) = @_;
 
     my $url = 'http://kenpom.com';
@@ -41,10 +50,10 @@ sub get_pomeroy_ranks {
             $pomeroy_rank_for{$team} = $rank;
         }
     }
-    return %pomeroy_rank_for;
+    return \%pomeroy_rank_for;
 }
 
-sub get_sagarin_ranks {
+sub sagarin_ranks {
     my ($self,) = @_;
 
     my $url = 'http://usatoday30.usatoday.com/sports/sagarin/bkt1213.htm';
@@ -53,33 +62,67 @@ sub get_sagarin_ranks {
     $tree->parse_content($self->mech->content);
     my ($header, $data) = $tree->select("pre");
     my $text = $data->as_text;
-    my @lines = split(/\n/, $text);
+    my @lines = split(/\r?\n/, $text);
     my %sagarin_rank_for;
     foreach my $line (@lines) {
 
         # Do we have a rank line
-        if (my ($rank, $team) = $line =~ m/^\s+(\d+)\s*([\w ]*)\s*=/) {
-
-            # strip of trailing whitespace
+        if (my ($rank, $team) = $line =~ m/^\s*(\d+)\s*([\w\- ]*)\s*=/) {
             $team =~ s/\s*$//;
             $team = $self->canonicalize_team($team);
             $sagarin_rank_for{$team} = $rank;
         }
     }
-    return %sagarin_rank_for;
+    return \%sagarin_rank_for;
 }
 
-sub get_ranks {
-    my ($self, $poll) = @_;
+sub rankings {
+    my ($self, ) = @_;
+    my @rankings;
+    if ($self->polls) {
+        push @rankings, qw(ap coaches);
+    }
+    if ($self->powers) {
+        push @rankings, qw(sagarin pomeroy rpi);
+    }
+    return sort @rankings;
+}
 
+# If a team is in both the AP and Coaches poll then it's in all of them.
+sub teams_in_all {
+    my ($self, ) = @_;
+    my %rd = $self->rank_dispatcher;
+    my $ap = $rd{ap}->();
+    my $coaches = $rd{coaches}->();
+    return grep { $coaches->{$_} } keys %{$ap};
+}
+
+sub rank_dispatcher {
+    my ($self, ) = @_;
+    return (
+        sagarin => sub { $self->sagarin_ranks },
+        pomeroy => sub { $self->pomeroy_ranks },
+        rpi     => sub { $self->generic_ranks('rpi') },
+        coaches => sub { $self->generic_ranks('coaches') },
+        ap      => sub { $self->generic_ranks('ap') },
+    );
+}
+
+sub generic_ranks {
+    my ($self, $poll) = @_;
     my %url_for = (
         'coaches' => 'http://www.usatoday.com/sports/ncaab/polls/coaches-poll',
         'ap'      => 'http://www.usatoday.com/sports/ncaab/polls/ap',
         'rpi'     => 'http://rivals.yahoo.com/ncaa/basketball/polls?poll=5',
     );
-    $self->mech->get($url_for{$poll});
+    my $content = $self->$poll;
+    if (not $content) {
+        $self->mech->get($url_for{$poll});
+        $content = $self->mech->content;
+        $self->$poll($content);
+    } 
     my $te = HTML::TableExtract->new(headers => [ 'Rank', 'Team', ],);
-    $te->parse($self->mech->content);
+    $te->parse($content);
 
     my %rank_for;
     foreach my $table ($te->tables) {
@@ -99,37 +142,49 @@ sub get_ranks {
             $rank_for{$team} = $rank;
         }
     }
-    return %rank_for;
+    return \%rank_for;
 }
 
-sub sum_ranks {
+sub all_ranks {
     my ($self, ) = @_;
-    my %s   = $self->get_sagarin_ranks;
-    my %p   = $self->get_pomeroy_ranks;
-    my %c   = $self->get_ranks('coaches');
-    my %ap  = $self->get_ranks('ap');
-    my %rpi = $self->get_ranks('rpi');
-    
     # Lets use the teams that are in both the Coaches and AP top 25 poll.
-    my @teams_in_all = grep { $c{$_} and $ap{$_} } keys %s;
-    my %sum;
-    foreach my $team (@teams_in_all) {
-        my @sources;
-        if ($self->polls) {
-            push @sources, \%c, \%ap;
-        }
-        if ($self->powers) {
-            push @sources, \%s, \%p, \%rpi;
-        }
-        my @ranks = map { $_->{$team} } @sources;
-        $sum{$team} = reduce { $a + $b } @ranks;
+    my %rd = $self->rank_dispatcher;
+    my @rankings = $self->rankings;
+    my %wanted_rankings;
+    foreach my $ranking (@rankings) {
+       $wanted_rankings{$ranking} = $rd{$ranking}->();
     }
-    return %sum;
+    my %all;
+    foreach my $team ($self->teams_in_all) {
+        foreach my $ranking (keys %wanted_rankings) {
+            $all{$team}->{$ranking} = $wanted_rankings{$ranking}->{$team}; 
+        }
+        $all{$team}->{sum} = reduce { $a + $b } values %{$all{$team}};
+    }
+    return \%all;
+}
+
+sub report_rank_details {
+    my ($self, ) = @_;
+    my $all = $self->all_ranks;
+    my $position = 1;
+    print "Position,Team,Rank Sum,";
+    print join(',', $self->rankings), "\n";
+    foreach my $team (sort {$all->{$a}->{sum} <=> $all->{$b}->{sum}} keys %{$all}) {
+        print "$position,$team,";
+        print $all->{$team}->{sum};
+        foreach my $ranking ($self->rankings) {
+            print ',', $all->{$team}->{$ranking};
+        }
+        print "\n";
+        $position++;
+    }
 }
 
 sub report_ranks {
     my ($self, ) = @_;
-    my %sum = $self->sum_ranks; 
+    my %all = %{$self->all_ranks}; 
+    my %sum = map { $_ => $all{$_}->{sum} } keys %all;
     my $position = 1;
     print "Position,Team,Rank Sum\n";
     foreach my $team (sort { $sum{$a} <=> $sum{$b} } keys %sum) {
@@ -143,6 +198,7 @@ sub canonicalize_team {
   die "No team" if not $team;
   $team =~ s/St\./State/;
   $team =~ s/Miami-Florida/Miami FL/;
+  $team =~ s/Miami \(FL\)/Miami FL/;
   $team =~ s/^Miami$/Miami FL/;
   $team =~ s/VCU\(Va. Commonwealth\)/Virginia Commonwealth/;
   return $team;

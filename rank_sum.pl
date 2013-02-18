@@ -12,5 +12,5 @@ my $ranker = RankBall->new(
     polls  => $polls,
     powers => $powers,
 );
-$ranker->report_ranks;
+$ranker->report_rank_details;
 
