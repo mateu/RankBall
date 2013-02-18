@@ -66,8 +66,9 @@ sub sagarin_ranks {
     my %sagarin_rank_for;
     foreach my $line (@lines) {
 
-        # Do we have a rank line
-        if (my ($rank, $team) = $line =~ m/^\s*(\d+)\s*([\w\- ]*)\s*=/) {
+        # Do we have a rank line. Teams with spaces, dashes, periods, and parenthesis
+        # For example, Miami-Florida and VCU(Va. Commonwealth)
+        if (my ($rank, $team) = $line =~ m/^\s*(\d+)\s*([\w\- \(\)\.]*)\s*=/) {
             $team =~ s/\s*$//;
             $team = $self->canonicalize_team($team);
             $sagarin_rank_for{$team} = $rank;
@@ -161,7 +162,8 @@ sub all_ranks {
         foreach my $ranking (keys %wanted_rankings) {
             $all{$team}->{$ranking} = $wanted_rankings{$ranking}->{$team}; 
         }
-        $all{$team}->{sum} = reduce { $a + $b } values %{$all{$team}};
+        my @ranks = values %{$all{$team}};
+        $all{$team}->{sum} = reduce { $a + $b } @ranks;
     }
     return \%all;
 }
@@ -202,7 +204,10 @@ sub canonicalize_team {
   $team =~ s/Miami-Florida/Miami FL/;
   $team =~ s/Miami \(FL\)/Miami FL/;
   $team =~ s/^Miami$/Miami FL/;
-  $team =~ s/VCU\(Va. Commonwealth\)/Virginia Commonwealth/;
+  $team =~ s/VCU\(Va. Commonwealth\)/VCU/;
+  $team =~ s/Va. Commonwealth/VCU/;
+  $team =~ s/Virginia Commonwealth/VCU/;
+  warn "$team" if ($team =~ m/Common/i);
   return $team;
 }
 

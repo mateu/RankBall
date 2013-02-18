@@ -37,5 +37,5 @@ print "$median_rank{$team2}\n";
 my %best_majority_rank = $ro->best_majority_rank;
 print "$team1 Best Majority_Rank: ";
 print "$best_majority_rank{$team1}\n";
-print "$team2 Best Majority_Rank: ";
+print "$team2 Best Majority Rank: ";
 print "$best_majority_rank{$team2}\n";
