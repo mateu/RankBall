@@ -1,5 +1,7 @@
 package RankBall;
 use Moo;
+use MooX::Types::MooseLike::Base qw( InstanceOf );
+use Statistics::RankOrder;
 use WWW::Mechanize;
 use HTML::TreeBuilder;
 use HTML::TreeBuilder::Select;
@@ -13,7 +15,18 @@ has cache => (
     lazy => 1,
     default => sub { CHI->new( driver => 'File', root_dir => '/tmp') },
 );
-
+has rank_order => (
+    is => 'ro',
+    isa => InstanceOf['Statistics::RankOrder'],
+    lazy => 1,
+    builder => '_build_rank_order',
+    handles => [qw( 
+        mean_rank 
+        trimmed_mean_rank 
+        median_rank 
+        best_majority_rank
+    )],
+);
 has mech => (
     is      => 'ro',
     lazy    => 1,
@@ -228,8 +241,63 @@ sub canonicalize_team {
   $team =~ s/VCU\(Va. Commonwealth\)/VCU/;
   $team =~ s/Va. Commonwealth/VCU/;
   $team =~ s/Virginia Commonwealth/VCU/;
-  warn "$team" if ($team =~ m/Common/i);
   return $team;
+}
+
+sub _build_rank_order {
+    my ($self, ) = @_;
+    my %rd = $self->rank_dispatcher; 
+    my %teams = map { $_ => 1 } $self->all_teams;
+    my $rank_order = Statistics::RankOrder->new;
+    # Feeds are considered ranking sources: coaches, ap, rpi, pomerory, sagarin
+    foreach my $feed (keys %rd) {
+        my $rankings = $rd{$feed}->();
+        my @valid_teams = grep { $teams{$_} } keys %{$rankings}; 
+        my @ranks = sort { $rankings->{$a} <=> $rankings->{$b} } @valid_teams;
+        $rank_order->add_judge( [@ranks] );
+    }
+    return $rank_order;
+}
+
+sub report_on {
+    my ($self, $what, $trim) = @_;
+    # Only trimmed_mean_ranks uses the $trim value
+    my %report = $self->$what($trim);
+    my @words = map { ucfirst($_) } split(/_/, $what);
+    my $stat = join(' ', @words);
+    print "Team,${stat}\n";
+    foreach my $team (sort { $report{$a} <=> $report{$b} } keys %report) {
+        print "$team,$report{$team}\n";
+    }
+}
+
+sub compare_two_teams {
+    my ($self, $team1, $team2) = @_;
+
+    $team1 ||= 'Indiana';
+    $team2 ||= 'Michigan State';
+
+    print "Stat,$team1,$team2\n";
+
+    my %mean_rank = $self->mean_rank;
+    print "Mean Rank,";
+    print "$mean_rank{$team1},";
+    print "$mean_rank{$team2}\n";
+
+    my %trimmed_mean_rank = $self->trimmed_mean_rank;
+    print "Trimmed Mean Rank,";
+    print "$trimmed_mean_rank{$team1},";
+    print "$trimmed_mean_rank{$team2}\n";
+
+    my %median_rank = $self->median_rank;
+    print "Median Rank,";
+    print "$median_rank{$team1},";
+    print "$median_rank{$team2}\n";
+
+    my %best_majority_rank = $self->best_majority_rank;
+    print "Majority_Rank,";
+    print "$best_majority_rank{$team1},";
+    print "$best_majority_rank{$team2}\n";
 }
 
 1
