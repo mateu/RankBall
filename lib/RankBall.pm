@@ -275,14 +275,14 @@ sub rank_stats {
 
 sub _build_report_header {
     my ($self, ) = @_;
-    my @report_header = ('position','team','sum');
+    my @report_header = ('position','team');
     push @report_header, map { 
         my $stat = $_;
         my $pre = "<a href='?sort=${stat}'>"; 
         $stat =~ s/_rank//g; 
         $stat =~ s/_/<br>\n/; 
         $pre . $stat . '</a>'; 
-    } $self->rank_stats;
+    } 'sum', $self->rank_stats;
     push @report_header, map { 
         "<a href='?sort=${_}'>${_}</a>"; 
     } $self->rankings;
