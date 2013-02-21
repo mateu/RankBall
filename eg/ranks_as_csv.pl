@@ -12,5 +12,8 @@ my $ranker = RankBall->new(
     polls  => $polls,
     powers => $powers,
 );
-$ranker->report_rank_details;
+$ranker->report_rank_details(
+    'sort' => 'best_majority_rank',
+    format => 'csv'
+);
 

@@ -1,23 +1,21 @@
 package RankBall;
 use Moo;
-use MooX::Types::MooseLike::Base qw( InstanceOf );
-use Statistics::RankOrder;
-use WWW::Mechanize;
-use HTML::TreeBuilder;
-use HTML::TreeBuilder::Select;
-use HTML::TableExtract;
+use 5.010;
 use List::Util qw( reduce );
-use CHI;
+use Cache::FastMmap;
+use Module::Runtime qw(require_module);
 use Data::Dumper::Concise;
 
 has cache => (
     is => 'ro',
     lazy => 1,
-    default => sub { CHI->new( driver => 'File', root_dir => '/tmp') },
+    default => sub {
+        require_module('Cache::FileCache');
+        return Cache::FileCache->new;
+    },
 );
 has rank_order => (
     is => 'ro',
-    isa => InstanceOf['Statistics::RankOrder'],
     lazy => 1,
     builder => '_build_rank_order',
     handles => [qw( 
@@ -27,10 +25,31 @@ has rank_order => (
         best_majority_rank
     )],
 );
+has table_extract => (
+    is => 'ro',
+    lazy => 1,
+    default => sub {
+        require_module('HTML::TableExtract');
+        HTML::TableExtract->new(headers => [ 'Rank', 'Team', ],);
+    },
+);
+has tree_builder => (
+    is => 'ro',
+    lazy => 1,
+    default => sub {
+        require_module('HTML::TreeBuilder');
+        require_module('HTML::TreeBuilder::Select');
+        return HTML::TreeBuilder->new;
+    },
+);
+
 has mech => (
     is      => 'ro',
     lazy    => 1,
-    default => sub { WWW::Mechanize->new },
+    default => sub { 
+        require_module('HTTP::Tiny'),
+        return HTTP::Tiny->new;
+    },
 );
 has polls => (
     is => 'ro',
@@ -49,27 +68,37 @@ has coaches => (
 has rpi => (
     is => 'rw',
 );
+has report_header => (
+    is => 'ro',
+    lazy => 1,
+    builder => '_build_report_header',
+);
 
 sub pomeroy_ranks {
     my ($self,) = @_;
-
     my $source = 'pomeroy';
     my $url = 'http://kenpom.com';
-    my $content = $self->cache->get($source);
-    if (not $content) {
-        warn "Getting content from ${source}";
-        $self->mech->get($url);
-        $content = $self->mech->content;
-        $self->cache->set($source, $content, "1 hour");
-    } 
-    my $te = HTML::TableExtract->new(headers => [ 'Rank', 'Team', ],);
-    $te->parse($content);
+    my $data = $self->cache->get($source);
+    if (not $data) {
+        warn "Getting data for ${source}";
+        my $response = $self->mech->get($url);
+        die "Failed to get {$url}" unless $response->{success};
+        $data = $self->extract_pomeroy_ranks_from($response->{content});
+        $self->cache->set($source, $data);
+    }
+    return $data;
+}
 
+sub extract_pomeroy_ranks_from {
+    my ($self,$content) = @_;
+
+    my $te = $self->table_extract;
+    $te->parse($content);
     my %pomeroy_rank_for;
     foreach my $table ($te->tables) {
         foreach my $row ($table->rows) {
             my ($rank, $team) = @{$row}[0..1];
-            next if (not ($team or $rank));
+            next if (not ($team and $rank));
             # trim whitespace
             $team =~ s/\s*$//;
             $team = $self->canonicalize_team($team);
@@ -84,14 +113,20 @@ sub sagarin_ranks {
 
     my $source = 'sagarin'; 
     my $url = 'http://usatoday30.usatoday.com/sports/sagarin/bkt1213.htm';
-    my $content = $self->cache->get($source);
-    if (not $content) {
-        warn "Getting content from ${source}";
-        $self->mech->get($url);
-        $content = $self->mech->content;
-        $self->cache->set($source, $content, "1 hour");
-    } 
-    my $tree = HTML::TreeBuilder->new;
+    my $data = $self->cache->get($source);
+    if (not $data) {
+        warn "Getting data for ${source}";
+        my $response = $self->mech->get($url);
+        die "Failed to get {$url}" unless $response->{success};
+        $data = $self->extract_sagarin_ranks_from($response->{content});
+        $self->cache->set($source, $data, );
+    }
+    return $data
+}
+
+sub extract_sagarin_ranks_from {
+    my ($self, $content) = @_;
+    my $tree = $self->tree_builder;
     $tree->parse_content($content);
     my ($header, $data) = $tree->select("pre");
     my $text = $data->as_text;
@@ -143,33 +178,53 @@ sub rank_dispatcher {
         ap      => sub { $self->generic_ranks('ap') },
     );
 }
+sub stat_dispatcher {
+    my ($self, ) = @_;
+    return {
+        mean_rank          => sub { +{$self->mean_rank} },
+        trimmed_mean_rank  => sub { +{$self->trimmed_mean_rank(1)} },
+        best_majority_rank => sub { +{$self->best_majority_rank} },
+        median_rank        => sub { +{$self->median_rank} },
+    };
+}
 
 sub generic_ranks {
-    my ($self, $poll) = @_;
+    my ($self, $source) = @_;
+
+    # Source better match up with one of these keys
     my %url_for = (
         'coaches' => 'http://www.usatoday.com/sports/ncaab/polls/coaches-poll',
         'ap'      => 'http://www.usatoday.com/sports/ncaab/polls/ap',
         'rpi'     => 'http://rivals.yahoo.com/ncaa/basketball/polls?poll=5',
     );
-    my $content = $self->cache->get($poll);
-    if (not $content) {
-        warn "Getting content from ${poll}";
-        $self->mech->get($url_for{$poll});
-        $content = $self->mech->content;
-        $self->cache->set($poll, $content, "1 hour");
-    } 
-    my $te = HTML::TableExtract->new(headers => [ 'Rank', 'Team', ],);
-    $te->parse($content);
+    my $data = $self->cache->get($source);
+    if (not $data) {
+        warn "Getting data for ${source}";
+        my $response = $self->mech->get($url_for{$source});
+        die "Failed to get {$url_for{$source}}" unless $response->{success};
+        $data = $self->extract_ranks_from($response->{content}, $source);
+        $self->cache->set($source, $data, );
+    }
+    return $data;
+}
 
+sub extract_ranks_from {
+    my ($self, $content, $source) = @_;
+
+    my $te = $self->table_extract;
+    $te->parse($content);
     my %rank_for;
     foreach my $table ($te->tables) {
         foreach my $row ($table->rows) {
             my ($rank, $team) = @{$row}[0..1];
             # Top 25 collected at this marker
+            if (not defined $rank) {
+                next;
+            }
             last if ($rank =~ m/Schools Dropped Out/);
             # remove &#160; 
             my $junk;
-            ($junk, $team) = split(/\n/, $team) if ($poll eq 'coaches' or $poll eq 'ap');
+            ($junk, $team) = split(/\n/, $team) if ($source eq 'coaches' or $source eq 'ap');
             $team =~ s/\n//g;
             $team =~ s/\s*$//;
             $team =~ s/^\s*//;
@@ -180,11 +235,25 @@ sub generic_ranks {
         }
     }
     return \%rank_for;
+
 }
 
 sub all_ranks {
     my ($self, ) = @_;
-    # Lets use the teams that are in both the Coaches and AP top 25 poll.
+
+    my $cache_key = 'all_ranks';
+    my $data = $self->cache->get($cache_key);
+    if (not $data) {
+        warn "Getting data for ${cache_key}";
+        $data = $self->build_all_ranks;
+        $self->cache->set($cache_key, $data, );
+    }
+    return $data;
+}
+
+sub build_all_ranks {
+    my ($self, ) = @_;
+
     my %rd = $self->rank_dispatcher;
     my @rankings = $self->rankings;
     my %wanted_rankings;
@@ -192,31 +261,90 @@ sub all_ranks {
        $wanted_rankings{$ranking} = $rd{$ranking}->();
     }
     my %all;
+    # Lets use the teams that are in both the Coaches and AP top 25 poll.
     foreach my $team ($self->all_teams) {
         foreach my $ranking (keys %wanted_rankings) {
             $all{$team}->{$ranking} = $wanted_rankings{$ranking}->{$team}; 
         }
         my @ranks = values %{$all{$team}};
         $all{$team}->{sum} = reduce { $a + $b } @ranks;
+        my $sd = $self->stat_dispatcher;
+        foreach my $stat ($self->rank_stats) {
+            $all{$team}->{$stat} = $sd->{$stat}->()->{$team};
+        }
     }
     return \%all;
 }
 
-sub report_rank_details {
+sub rank_stats {
     my ($self, ) = @_;
+    return sort keys %{$self->stat_dispatcher};
+}
+
+sub _build_report_header {
+    my ($self, ) = @_;
+    my @report_header = ('position','team','sum');
+    push @report_header, map { s/_rank//g; s/_/<br>\n/; $_; }$self->rank_stats;
+    push @report_header, $self->rankings;
+    return \@report_header;
+}
+
+sub report_body {
+    my ($self, $sort) = @_;
+    $sort ||= 'sum';
     my $all = $self->all_ranks;
     my $position = 1;
-    print "Position,Team,Rank Sum,";
-    print join(',', $self->rankings), "\n";
-    foreach my $team (sort {$all->{$a}->{sum} <=> $all->{$b}->{sum}} keys %{$all}) {
-        print "$position,$team,";
-        print $all->{$team}->{sum};
-        foreach my $ranking ($self->rankings) {
-            print ',', $all->{$team}->{$ranking};
+    my @report_body;
+    foreach my $team (sort {$all->{$a}->{$sort} <=> $all->{$b}->{$sort}} keys %{$all}) {
+        my @team_ranks = ($position,$team);
+        push @team_ranks, $all->{$team}->{sum};
+        foreach my $metric ($self->rank_stats, $self->rankings) {
+            push @team_ranks, $all->{$team}->{$metric};
         }
-        print "\n";
+        push @report_body, [@team_ranks];
         $position++;
     }
+    return \@report_body;
+}
+
+sub report_rank_details {
+    my ($self, %options) = @_;
+    my $format = $options{format}||'csv';
+    my $header = join(',', @{$self->report_header});
+    my @report = ($header);
+    foreach my $team_data (@{$self->report_body($options{sort})}) {
+        my $line = join(',', @{$team_data});
+        push @report, $line;
+    }
+    foreach my $line (@report) {
+        say $line;
+    }
+}
+
+sub report_rank_details_as_HTML {
+    my ($self, %options) = @_;
+    my $output;
+    $output = '<table align="center" style="border-collapse:collapse;">';
+    $output .= '<tr><th colspan="2"></th>
+    <th colspan="5" 
+    style="border: 1px silver dotted;">Rank Stats</th>
+    <th colspan="5"
+    style="border: 1px silver dotted;">Sources</th></tr>';
+    my $header = '<tr>
+    <th valign="bottom" style="border: 1px silver dotted;">' 
+    . join('</th><th valign="bottom" style="border: 1px silver dotted;">'
+    , @{$self->report_header}) . '</th></tr>';
+    $output .= $header;
+    my @data = @{$self->report_body($options{sort})};
+    foreach my $i (0..$#data) {
+        my $team_data = $data[$i];
+        my $background_color = ($i % 2) ? 'antiquewhite' : 'white';
+        my $line = "<tr style='background-color:${background_color}'><td>" 
+          . join('</td><td>', @{$team_data}) . '</td></tr>';
+        $output .= $line;
+    }
+    $output .= '</table>';
+    return $output;
 }
 
 sub report_ranks {
@@ -248,6 +376,7 @@ sub _build_rank_order {
     my ($self, ) = @_;
     my %rd = $self->rank_dispatcher; 
     my %teams = map { $_ => 1 } $self->all_teams;
+    require_module('Statistics::RankOrder');
     my $rank_order = Statistics::RankOrder->new;
     # Feeds are considered ranking sources: coaches, ap, rpi, pomerory, sagarin
     foreach my $feed (keys %rd) {
