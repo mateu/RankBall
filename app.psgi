@@ -14,7 +14,8 @@ sub dispatch_request {
 
     sub (GET + ?sort~) {
         my ($self, $sort) = @_;
-        [ 200, [ 'Content-type', 'text/html' ], [$self->ranker->report_rank_details_as_HTML(sort => $sort)] ];
+        $sort ||= 'sum';
+        [ 200, [ 'Content-type', 'text/html' ], [$self->ranker->wrapped_HTML(sort => $sort)] ];
       }, 
     sub () {
         [ 405, [ 'Content-type', 'text/plain' ], ['Method not allowed'] ];

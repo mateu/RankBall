@@ -340,7 +340,7 @@ sub report_rank_details {
 sub report_rank_details_as_HTML {
     my ($self, %options) = @_;
     my $output;
-    $output = '<table align="center" style="border-collapse:collapse;">';
+    $output = '<table align="center" style="font-size: 1.22em; border-collapse:collapse;">';
     $output .= '<tr><th colspan="2"></th>
     <th colspan="5" 
     style="border: 1px silver dotted;">Rank Stats</th>
@@ -355,12 +355,35 @@ sub report_rank_details_as_HTML {
     foreach my $i (0..$#data) {
         my $team_data = $data[$i];
         my $background_color = ($i % 2) ? 'antiquewhite' : 'white';
-        my $line = "<tr style='background-color:${background_color}'><td>" 
-          . join('</td><td>', @{$team_data}) . '</td></tr>';
+        my @team_data = @{$team_data};
+        my $line = "<tr style='background-color:${background_color}'>";
+        foreach my $j (0..$#team_data) {
+           my $text_align = 'center';
+           # Team name is in the 2nd slot, and it has a distict text alignment
+           $text_align = 'left' if ($j == 1);
+           $line .= "<td style='text-align:${text_align};'>";
+           $line .= $team_data[$j];
+           $line .= '</td>';
+        }
+        $line .= '</tr>';
         $output .= $line;
     }
     $output .= '</table>';
     return $output;
+}
+
+sub wrapped_HTML {
+    my ($self, %options) = @_;
+    my $h = use_module('HTML::Tiny')->new;
+    my $title = 'College Basketball Rankings';
+    my $html_page  = $h->html([
+        $h->head( $h->title($title) ),
+        $h->body([
+            $h->h1( { style => 'text-align:center;' }, $title ),
+            $self->report_rank_details_as_HTML(sort => $options{'sort'}),
+        ]),
+    ]);
+    return $html_page;
 }
 
 sub report_ranks {
