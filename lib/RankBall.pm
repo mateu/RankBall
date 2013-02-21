@@ -1,10 +1,8 @@
 package RankBall;
 use Moo;
-use 5.010;
 use List::Util qw( reduce );
-use Cache::FastMmap;
+use Storable;
 use Module::Runtime qw(require_module);
-use Data::Dumper::Concise;
 
 has cache => (
     is => 'ro',
@@ -300,12 +298,12 @@ sub _build_report_header {
 sub report_body {
     my ($self, $sort) = @_;
     $sort ||= 'sum';
-    my $cache_key = "report_body:${sort}";
-    my $data = $self->cache->get($cache_key);
+    my $cache_key = "report_body_${sort}";
+    my $data = eval { retrieve $cache_key };
     if (not $data) {
         warn "Getting data for ${cache_key}";
         $data = $self->build_report_body($sort);
-        $self->cache->set($cache_key, $data, );
+        store $data, $cache_key;
     }
     return $data
 
@@ -340,7 +338,7 @@ sub report_rank_details {
         push @report, $line;
     }
     foreach my $line (@report) {
-        say $line;
+        print $line, "\n";
     }
 }
 
