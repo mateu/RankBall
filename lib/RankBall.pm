@@ -284,14 +284,36 @@ sub rank_stats {
 sub _build_report_header {
     my ($self, ) = @_;
     my @report_header = ('position','team','sum');
-    push @report_header, map { s/_rank//g; s/_/<br>\n/; $_; }$self->rank_stats;
-    push @report_header, $self->rankings;
+    push @report_header, map { 
+        my $stat = $_;
+        my $pre = "<a href='?sort=${stat}'>"; 
+        $stat =~ s/_rank//g; 
+        $stat =~ s/_/<br>\n/; 
+        $pre . $stat . '</a>'; 
+    } $self->rank_stats;
+    push @report_header, map { 
+        "<a href='?sort=${_}'>${_}</a>"; 
+    } $self->rankings;
     return \@report_header;
 }
 
 sub report_body {
     my ($self, $sort) = @_;
     $sort ||= 'sum';
+    my $cache_key = "report_body:${sort}";
+    my $data = $self->cache->get($cache_key);
+    if (not $data) {
+        warn "Getting data for ${cache_key}";
+        $data = $self->build_report_body($sort);
+        $self->cache->set($cache_key, $data, );
+    }
+    return $data
+
+}
+
+sub build_report_body {
+    my ($self, $sort) = @_;
+
     my $all = $self->all_ranks;
     my $position = 1;
     my @report_body;
@@ -305,6 +327,7 @@ sub report_body {
         $position++;
     }
     return \@report_body;
+
 }
 
 sub report_rank_details {
