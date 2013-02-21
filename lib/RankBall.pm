@@ -9,6 +9,10 @@ has cache => (
     lazy => 1,
     default => sub { use_module('Cache::FileCache')->new },
 );
+has data_expiry => (
+    is => 'lazy',
+    builder => sub { 0.05 }
+);
 has rank_order => (
     is => 'ro',
     lazy => 1,
@@ -288,12 +292,13 @@ sub _build_report_header {
 sub report_body {
     my ($self, $sort) = @_;
     $sort ||= 'sum';
-    my $cache_key = "report_body_${sort}";
-    my $data = eval { retrieve $cache_key };
+    my $data_file = "report_body.${sort}.storable";
+    unlink $data_file if (-e $data_file and (-M $data_file > $self->data_expiry));
+    my $data = eval { retrieve $data_file };
     if (not $data) {
-        warn "Getting data for ${cache_key}";
+        warn "Getting data for ${data_file}";
         $data = $self->build_report_body($sort);
-        store $data, $cache_key;
+        store $data, $data_file;
     }
     return $data
 
