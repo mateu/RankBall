@@ -2,15 +2,12 @@ package RankBall;
 use Moo;
 use List::Util qw( reduce );
 use Storable;
-use Module::Runtime qw(require_module);
+use Module::Runtime qw(use_module);
 
 has cache => (
     is => 'ro',
     lazy => 1,
-    default => sub {
-        require_module('Cache::FileCache');
-        return Cache::FileCache->new;
-    },
+    default => sub { use_module('Cache::FileCache')->new },
 );
 has rank_order => (
     is => 'ro',
@@ -26,28 +23,21 @@ has rank_order => (
 has table_extract => (
     is => 'ro',
     lazy => 1,
-    default => sub {
-        require_module('HTML::TableExtract');
-        HTML::TableExtract->new(headers => [ 'Rank', 'Team', ],);
-    },
+    default => sub { use_module('HTML::TableExtract')->new(headers => [ 'Rank', 'Team', ]) },
 );
 has tree_builder => (
     is => 'ro',
     lazy => 1,
     default => sub {
-        require_module('HTML::TreeBuilder');
-        require_module('HTML::TreeBuilder::Select');
-        return HTML::TreeBuilder->new;
+        use_module('HTML::TreeBuilder::Select');
+        use_module('HTML::TreeBuilder')->new;
     },
 );
 
 has mech => (
     is      => 'ro',
     lazy    => 1,
-    default => sub { 
-        require_module('HTTP::Tiny'),
-        return HTTP::Tiny->new;
-    },
+    default => sub { use_module('HTTP::Tiny')->new },
 );
 has polls => (
     is => 'ro',
@@ -397,8 +387,7 @@ sub _build_rank_order {
     my ($self, ) = @_;
     my %rd = $self->rank_dispatcher; 
     my %teams = map { $_ => 1 } $self->all_teams;
-    require_module('Statistics::RankOrder');
-    my $rank_order = Statistics::RankOrder->new;
+    my $rank_order = use_module('Statistics::RankOrder')->new;
     # Feeds are considered ranking sources: coaches, ap, rpi, pomerory, sagarin
     foreach my $feed (keys %rd) {
         my $rankings = $rd{$feed}->();
