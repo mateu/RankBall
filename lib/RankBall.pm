@@ -11,7 +11,11 @@ has cache => (
 );
 has data_expiry => (
     is => 'lazy',
-    builder => sub { 0.05 }
+    builder => sub { 0.05 },
+);
+has 'sort' => (
+    is => 'lazy',
+    builder => sub { 'sum' },
 );
 has rank_order => (
     is => 'ro',
@@ -374,13 +378,19 @@ sub report_rank_details_as_HTML {
 
 sub wrapped_HTML {
     my ($self, %options) = @_;
+    my $sort = $options{'sort'} || $self->sort;
+    my $sort_text = $sort;
+    $sort_text =~ s/_/ /g;
     my $h = use_module('HTML::Tiny')->new;
     my $title = 'College Basketball Rankings';
     my $html_page  = $h->html([
         $h->head( $h->title($title) ),
         $h->body([
-            $h->h1( { style => 'text-align:center;' }, $title ),
-            $self->report_rank_details_as_HTML(sort => $options{'sort'}),
+            $h->h1({ style => 'text-align:center;' }, $title ),
+            $self->report_rank_details_as_HTML(sort => $sort),
+            $h->div({ style => 'text-align:center;'}, 
+              "Sorted by ". $h->span({style => 'color:darkgreen;'}, $sort_text)
+            ),
         ]),
     ]);
     return $html_page;
