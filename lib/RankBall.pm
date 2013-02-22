@@ -292,7 +292,7 @@ sub _build_report_header {
 sub report_body {
     my ($self, $sort) = @_;
     $sort ||= 'sum';
-    my $data_file = "report_body.${sort}.storable";
+    my $data_file = "/tmp/report_body.${sort}.storable";
     unlink $data_file if (-e $data_file and (-M $data_file > $self->data_expiry));
     my $data = eval { retrieve $data_file };
     if (not $data) {
