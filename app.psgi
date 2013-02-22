@@ -1,4 +1,3 @@
-package MyPackage;
 use Web::Simple;
 use Module::Runtime qw(use_module);
 
