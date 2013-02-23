@@ -297,7 +297,10 @@ sub report_body {
     my ($self, $sort) = @_;
     $sort ||= 'sum';
     my $data_file = "/tmp/report_body.${sort}.storable";
-    unlink $data_file if (-e $data_file and (-M $data_file > $self->data_expiry));
+    if (-e $data_file and (-M $data_file > $self->data_expiry)) {
+        warn "Unlinking data file: $data_file\n";
+        unlink $data_file;
+    }
     my $data = eval { retrieve $data_file };
     if (not $data) {
         warn "Getting data for ${data_file}";
