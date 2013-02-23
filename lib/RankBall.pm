@@ -379,7 +379,7 @@ sub report_rank_details_as_HTML {
     return $output;
 }
 
-sub wrapped_HTML {
+sub full_HTML {
     my ($self, %options) = @_;
     my $sort = $options{'sort'} || $self->sort;
     my $sort_text = $sort;

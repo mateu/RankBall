@@ -1,25 +1,17 @@
-#!/usr/bin/env perl
-
-package RankBaller;
+package MyPackage;
 use Web::Simple;
-use RankBall;
+use Module::Runtime qw(use_module);
 
 has 'ranker' => (
-  is => 'ro',
-  default => sub { RankBall->new },
+  is => 'lazy',
+  builder => sub { use_module('RankBall')->new },
 );
 
 sub dispatch_request {
-    my ($self, $env) = @_;
-
     sub (GET + ?sort~) {
-        my ($self, $sort) = @_;
-        $sort ||= 'sum';
-        [ 200, [ 'Content-type', 'text/html' ], [$self->ranker->wrapped_HTML(sort => $sort)] ];
+        my $html_page = $_[0]->ranker->full_HTML(sort => $_[1]);
+        [ 200, [ 'Content-type', 'text/html' ], [$html_page] ];
       }, 
-    sub () {
-        [ 405, [ 'Content-type', 'text/plain' ], ['Method not allowed'] ];
-      }
 }
 
-RankBaller->run_if_script;
+__PACKAGE__->run_if_script;
