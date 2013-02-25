@@ -2,6 +2,7 @@ package RankBall;
 use Moo;
 use List::Util qw( reduce );
 use Module::Runtime qw(use_module);
+use Data::Dumper::Concise;
 
 has cache => (
     is => 'ro',
@@ -262,7 +263,9 @@ sub build_all_ranks {
             $all{$team}->{$ranking} = $wanted_rankings{$ranking}->{$team}; 
         }
         my @ranks = values %{$all{$team}};
-        $all{$team}->{sum} = reduce { $a + $b } @ranks;
+        unless (eval {$all{$team}->{sum} = reduce { $a + $b } @ranks; 1;}) {
+            die "$team has some undefined ranks: ", Dumper $all{$team};
+        }
         my $sd = $self->stat_dispatcher;
         foreach my $stat ($self->rank_stats) {
             $all{$team}->{$stat} = $sd->{$stat}->()->{$team};
@@ -408,7 +411,8 @@ sub report_ranks {
 sub canonicalize_team {
   my ($self, $team) = @_;
   die "No team" if not $team;
-  $team =~ s/St\./State/;
+  $team =~ s/^St\./Saint/;
+  $team =~ s/St\.$/State/;
   $team =~ s/Miami-Florida/Miami FL/;
   $team =~ s/Miami \(FL\)/Miami FL/;
   $team =~ s/^Miami$/Miami FL/;
