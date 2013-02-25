@@ -1,13 +1,12 @@
 package RankBall;
 use Moo;
 use List::Util qw( reduce );
-use Storable;
 use Module::Runtime qw(use_module);
 
 has cache => (
     is => 'ro',
     lazy => 1,
-    default => sub { use_module('Cache::FileCache')->new },
+    default => sub { use_module('Cache::FileCache')->new({default_expires_in => 600}) },
 );
 has data_expiry => (
     is => 'lazy',
@@ -21,7 +20,7 @@ has rank_order => (
     is => 'ro',
     lazy => 1,
     builder => '_build_rank_order',
-    handles => [qw( 
+    handles => [qw(
         mean_rank 
         trimmed_mean_rank 
         median_rank 
@@ -296,19 +295,14 @@ sub _build_report_header {
 sub report_body {
     my ($self, $sort) = @_;
     $sort ||= 'sum';
-    my $data_file = "/tmp/report_body.${sort}.storable";
-    if (-e $data_file and (-M $data_file > $self->data_expiry)) {
-        warn "Unlinking data file: $data_file\n";
-        unlink $data_file;
-    }
-    my $data = eval { retrieve $data_file };
+    my $source = "report_body.${sort}";
+    my $data = $self->cache->get($source);
     if (not $data) {
-        warn "Getting data for ${data_file}";
+        warn "Building ${source}";
         $data = $self->build_report_body($sort);
-        store $data, $data_file;
+        $self->cache->set($source, $data, );
     }
     return $data
-
 }
 
 sub build_report_body {
