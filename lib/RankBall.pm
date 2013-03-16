@@ -214,17 +214,16 @@ sub extract_ranks_from {
         foreach my $row ($table->rows) {
             my ($rank, $team) = @{$row}[0..1];
             # Top 25 collected at this marker
-            if (not defined $rank) {
-                next;
-            }
+            next if not defined $rank;
             last if ($rank =~ m/Schools Dropped Out/);
             # remove &#160; 
             my $junk;
             ($junk, $team) = split(/\n/, $team) if ($source eq 'coaches' or $source eq 'ap');
+            next if not defined $team;
             $team =~ s/\n//g;
             $team =~ s/\s*$//;
             $team =~ s/^\s*//;
-            next if (not ($team or $rank));
+            next if (not ($team and $rank));
             ($rank) = $rank =~ m/(\d+)/;
             $team = $self->canonicalize_team($team);
             $rank_for{$team} = $rank;
