@@ -96,7 +96,7 @@ sub extract_pomeroy_ranks_from {
             my ($rank, $team) = @{$row}[0..1];
             next if (not ($team and $rank));
             # trim whitespace
-            $team =~ s/\s*$//;
+            $team =~ s/\s*(\d*)?$//;
             $team = $self->canonicalize_team($team);
             $pomeroy_rank_for{$team} = $rank;
         }
@@ -267,6 +267,7 @@ sub build_all_ranks {
         }
         my $sd = $self->stat_dispatcher;
         foreach my $stat ($self->rank_stats) {
+            die "stat: $stat not available for team: $team" if not exists $sd->{$stat}->()->{$team};
             $all{$team}->{$stat} = $sd->{$stat}->()->{$team};
         }
     }
@@ -412,6 +413,7 @@ sub canonicalize_team {
   die "No team" if not $team;
   $team =~ s/^St\./Saint/;
   $team =~ s/St\.$/State/;
+  $team =~ s/Saint Mary\'s\-Cal\./Saint Mary's/;
   $team =~ s/Miami-Florida/Miami FL/;
   $team =~ s/Miami \(FL\)/Miami FL/;
   $team =~ s/^Miami$/Miami FL/;
