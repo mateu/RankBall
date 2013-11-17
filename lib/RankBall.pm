@@ -73,7 +73,7 @@ has report_header => (
 sub pomeroy_ranks {
     my ($self,) = @_;
     my $source = 'pomeroy';
-    my $url = 'http://kenpom.com';
+    my $url = $self->url_for->{pomeroy};
     my $data = $self->cache->get($source);
     if (not $data) {
         warn "Getting data for ${source}";
@@ -108,7 +108,7 @@ sub sagarin_ranks {
     my ($self,) = @_;
 
     my $source = 'sagarin'; 
-    my $url = 'http://usatoday30.usatoday.com/sports/sagarin/bkt1213.htm';
+    my $url = $self->url_for->{$source};
     my $data = $self->cache->get($source);
     if (not $data) {
         warn "Getting data for ${source}";
@@ -122,22 +122,23 @@ sub sagarin_ranks {
 
 sub extract_sagarin_ranks_from {
     my ($self, $content) = @_;
+
     my $tree = $self->tree_builder;
     $tree->parse_content($content);
-    my ($header, $data) = $tree->select("pre");
-    my $text = $data->as_text;
-    my @lines = split(/\r?\n/, $text);
+    my ($header, $data, $inner_data, $inner_most_data) = $tree->select('div.sagarin-page pre');
+    my $text = $inner_most_data->as_text;
     my %sagarin_rank_for;
-    foreach my $line (@lines) {
+    my @ranks;
+    (@ranks) = $text =~ m/\s*(\d+)\s*([\w\- \(\)\.]*)\s*=/g;
+    my %ranks = @ranks;
+    foreach my $rank (keys %ranks) {
+        my $team = $ranks{$rank};
+        $team =~ s/\s*$//;
+        $team = $self->canonicalize_team($team);
+        $sagarin_rank_for{$team} = $rank;
+        
+    } 
 
-        # Do we have a rank line. Teams with spaces, dashes, periods, and parenthesis
-        # For example, Miami-Florida and VCU(Va. Commonwealth)
-        if (my ($rank, $team) = $line =~ m/^\s*(\d+)\s*([\w\- \(\)\.]*)\s*=/) {
-            $team =~ s/\s*$//;
-            $team = $self->canonicalize_team($team);
-            $sagarin_rank_for{$team} = $rank;
-        }
-    }
     return \%sagarin_rank_for;
 }
 
@@ -184,20 +185,32 @@ sub stat_dispatcher {
     };
 }
 
+sub url_for {
+    my ($self, ) = @_;
+    return {
+        pomeroy => 'http://kenpom.com',
+        sagarin => 'http://www.usatoday.com/sports/ncaab/sagarin/',
+        coaches => 'http://www.usatoday.com/sports/ncaab/polls/smg-usat/2013/2',
+        ap      => 'http://www.usatoday.com/sports/ncaab/polls/poll-ap/2013/2/',
+        rpi     => 'http://rivals.yahoo.com/ncaa/basketball/polls?poll=5',
+    };
+}
+
 sub generic_ranks {
     my ($self, $source) = @_;
 
     # Source better match up with one of these keys
-    my %url_for = (
-        'coaches' => 'http://www.usatoday.com/sports/ncaab/polls/coaches-poll',
-        'ap'      => 'http://www.usatoday.com/sports/ncaab/polls/ap',
-        'rpi'     => 'http://rivals.yahoo.com/ncaa/basketball/polls?poll=5',
-    );
+    # TODO: The usatoday urls now use a week number so that must be calculated
+    # The rpi page is only the top 100
+    my @generic_ranks = qw/ coaches ap rpi /;
+    my %url_for = %{$self->url_for};
+    my %url_wanted;
+    @url_wanted{@generic_ranks} = @url_for{@generic_ranks};
     my $data = $self->cache->get($source);
     if (not $data) {
         warn "Getting data for ${source}";
-        my $response = $self->mech->get($url_for{$source});
-        die "Failed to get {$url_for{$source}}" unless $response->{success};
+        my $response = $self->mech->get($url_wanted{$source});
+        die "Failed to get {$url_wanted{$source}}" unless $response->{success};
         $data = $self->extract_ranks_from($response->{content}, $source);
         $self->cache->set($source, $data, );
     }
@@ -217,8 +230,8 @@ sub extract_ranks_from {
             next if not defined $rank;
             last if ($rank =~ m/Schools Dropped Out/);
             # remove &#160; 
-            my $junk;
-            ($junk, $team) = split(/\n/, $team) if ($source eq 'coaches' or $source eq 'ap');
+            my $nick;
+            ($team, $nick) = split(/\n/, $team) if ($source eq 'coaches' or $source eq 'ap');
             next if not defined $team;
             $team =~ s/\n//g;
             $team =~ s/\s*$//;
@@ -263,7 +276,8 @@ sub build_all_ranks {
         }
         my @ranks = values %{$all{$team}};
         unless (eval {$all{$team}->{sum} = reduce { $a + $b } @ranks; 1;}) {
-            die "$team has some undefined ranks: ", Dumper $all{$team};
+            warn "$team has some undefined ranks: ", Dumper $all{$team};
+            next;
         }
         my $sd = $self->stat_dispatcher;
         foreach my $stat ($self->rank_stats) {
@@ -290,7 +304,9 @@ sub _build_report_header {
         $pre . $stat . '</a>'; 
     } 'sum', $self->rank_stats;
     push @report_header, map { 
-        "<a href='?sort=${_}'>${_}</a>"; 
+        my $source = $self->url_for->{$_};
+          "<a href='$source'>${_}</a><br>"
+        . "<a href='?sort=${_}'>sort</a>"; 
     } $self->rankings;
     return \@report_header;
 }
