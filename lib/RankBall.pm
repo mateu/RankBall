@@ -5,9 +5,8 @@ use Module::Runtime qw(use_module);
 use Data::Dumper::Concise;
 
 has cache => (
-    is => 'ro',
-    lazy => 1,
-    default => sub { use_module('Cache::FileCache')->new({default_expires_in => 600}) },
+    is => 'lazy',
+    builder => sub { use_module('Cache::FileCache')->new({default_expires_in => 600}) },
 );
 has data_expiry => (
     is => 'lazy',
@@ -18,8 +17,7 @@ has 'sort' => (
     builder => sub { 'sum' },
 );
 has rank_order => (
-    is => 'ro',
-    lazy => 1,
+    is => 'lazy',
     builder => '_build_rank_order',
     handles => [qw(
         mean_rank 
@@ -29,23 +27,20 @@ has rank_order => (
     )],
 );
 has table_extract => (
-    is => 'ro',
-    lazy => 1,
-    default => sub { use_module('HTML::TableExtract')->new(headers => [ 'Rank', 'Team', ]) },
+    is => 'lazy' ,
+    builder => sub { use_module('HTML::TableExtract')->new(headers => [ 'Rank', 'Team', ]) },
 );
 has tree_builder => (
-    is => 'ro',
-    lazy => 1,
-    default => sub {
+    is => 'lazy',
+    builder => sub {
         use_module('HTML::TreeBuilder::Select');
         use_module('HTML::TreeBuilder')->new;
     },
 );
 
 has mech => (
-    is      => 'ro',
-    lazy    => 1,
-    default => sub { use_module('HTTP::Tiny')->new },
+    is      => 'lazy',
+    builder => sub { use_module('HTTP::Tiny')->new },
 );
 has polls => (
     is => 'ro',
@@ -65,8 +60,7 @@ has rpi => (
     is => 'rw',
 );
 has report_header => (
-    is => 'ro',
-    lazy => 1,
+    is => 'lazy',
     builder => '_build_report_header',
 );
 
