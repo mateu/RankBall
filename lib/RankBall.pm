@@ -2,6 +2,7 @@ package RankBall;
 use Moo;
 use List::Util qw( reduce );
 use Module::Runtime qw(use_module);
+use DateTime;
 use Data::Dumper::Concise;
 
 has cache => (
@@ -63,6 +64,8 @@ has report_header => (
     is => 'lazy',
     builder => '_build_report_header',
 );
+has poll_week => (is => 'lazy', builder => 1);
+has url_for => (is => 'lazy', builder => 1);
 
 sub pomeroy_ranks {
     my ($self,) = @_;
@@ -179,15 +182,35 @@ sub stat_dispatcher {
     };
 }
 
-sub url_for {
+sub _build_url_for {
     my ($self, ) = @_;
     return {
         pomeroy => 'http://kenpom.com',
         sagarin => 'http://www.usatoday.com/sports/ncaab/sagarin/',
-        coaches => 'http://www.usatoday.com/sports/ncaab/polls/smg-usat/2013/2',
-        ap      => 'http://www.usatoday.com/sports/ncaab/polls/poll-ap/2013/2/',
+        coaches => 'http://www.usatoday.com/sports/ncaab/polls/smg-usat/2013/' . $self->poll_week,
+        ap      => 'http://www.usatoday.com/sports/ncaab/polls/poll-ap/2013/' . $self->poll_week,
         rpi     => 'http://rivals.yahoo.com/ncaa/basketball/polls?poll=5',
     };
+}
+
+sub _build_poll_week {
+    my ($self, ) = @_;
+    # Polls come out at 1EST on Monday
+    # Second weekly poll was Nov 11 1pm EST
+    my $start_week = 2; 
+    my $cutoff_time = DateTime->new(
+	year => 2013,
+	month => 11,
+	day => 11,
+	hour => 12,
+	minute => 0,
+	second => 0,
+	time_zone => 'America/Chicago',
+    );
+    my $now = DateTime->now(time_zone => 'America/Chicago');
+    my $delta_days = $cutoff_time->delta_days($now);
+    return ($start_week + $delta_days->weeks);
+
 }
 
 sub generic_ranks {
@@ -275,8 +298,11 @@ sub build_all_ranks {
         }
         my $sd = $self->stat_dispatcher;
         foreach my $stat ($self->rank_stats) {
-            die "stat: $stat not available for team: $team" if not exists $sd->{$stat}->()->{$team};
-            $all{$team}->{$stat} = $sd->{$stat}->()->{$team};
+            if (not exists $sd->{$stat}->()->{$team}) {
+		warn "stat: $stat not available for team: $team";
+		next;
+	    }
+	    $all{$team}->{$stat} = $sd->{$stat}->()->{$team};
         }
     }
     return \%all;
