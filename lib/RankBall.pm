@@ -73,7 +73,7 @@ sub pomeroy_ranks {
     my $url = $self->url_for->{pomeroy};
     my $data = $self->cache->get($source);
     if (not $data) {
-        warn "Getting data for ${source}";
+        warn "Getting data for ${source} from: $url\n";
         my $response = $self->mech->get($url);
         die "Failed to get {$url}" unless $response->{success};
         $data = $self->extract_pomeroy_ranks_from($response->{content});
@@ -108,7 +108,7 @@ sub sagarin_ranks {
     my $url = $self->url_for->{$source};
     my $data = $self->cache->get($source);
     if (not $data) {
-        warn "Getting data for ${source}";
+        warn "Getting data for ${source}i from: $url\n";
         my $response = $self->mech->get($url);
         die "Failed to get {$url}" unless $response->{success};
         $data = $self->extract_sagarin_ranks_from($response->{content});
@@ -225,7 +225,7 @@ sub generic_ranks {
     @url_wanted{@generic_ranks} = @url_for{@generic_ranks};
     my $data = $self->cache->get($source);
     if (not $data) {
-        warn "Getting data for ${source}";
+        warn "Getting data for ${source} from: $url_wanted{$source}\n";
         my $response = $self->mech->get($url_wanted{$source});
         die "Failed to get {$url_wanted{$source}}" unless $response->{success};
         $data = $self->extract_ranks_from($response->{content}, $source);
