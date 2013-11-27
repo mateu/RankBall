@@ -108,7 +108,7 @@ sub sagarin_ranks {
     my $url = $self->url_for->{$source};
     my $data = $self->cache->get($source);
     if (not $data) {
-        warn "Getting data for ${source}i from: $url\n";
+        warn "Getting data for ${source} from: $url\n";
         my $response = $self->mech->get($url);
         die "Failed to get {$url}" unless $response->{success};
         $data = $self->extract_sagarin_ranks_from($response->{content});
@@ -298,7 +298,7 @@ sub build_all_ranks {
         }
         my $sd = $self->stat_dispatcher;
         foreach my $stat ($self->rank_stats) {
-            if (not exists $sd->{$stat}->()->{$team}) {
+            if (not defined $sd->{$stat}->()->{$team}) {
 		warn "stat: $stat not available for team: $team";
 		next;
 	    }
@@ -456,6 +456,7 @@ sub canonicalize_team {
   $team =~ s/VCU\(Va. Commonwealth\)/VCU/;
   $team =~ s/Va. Commonwealth/VCU/;
   $team =~ s/Virginia Commonwealth/VCU/;
+  $team =~ s/Massachusetts/UMass/;
   return $team;
 }
 
