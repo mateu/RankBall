@@ -457,6 +457,7 @@ sub canonicalize_team {
   $team =~ s/Va. Commonwealth/VCU/;
   $team =~ s/Virginia Commonwealth/VCU/;
   $team =~ s/Massachusetts/UMass/;
+  $team =~ s/Southern Methodist Univ./SMU/;
   return $team;
 }
 
