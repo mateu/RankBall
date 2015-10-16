@@ -187,9 +187,9 @@ sub _build_url_for {
     return {
         pomeroy => 'http://kenpom.com',
         sagarin => 'http://www.usatoday.com/sports/ncaab/sagarin/',
-        coaches => 'http://www.usatoday.com/sports/ncaab/polls/smg-usat/2013/' . $self->poll_week,
-        ap      => 'http://www.usatoday.com/sports/ncaab/polls/poll-ap/2013/' . $self->poll_week,
-        rpi     => 'http://rivals.yahoo.com/ncaa/basketball/polls?poll=5',
+        ap      => 'http://sports.yahoo.com/ncaa/basketball/polls?poll=1',
+        coaches => 'http://sports.yahoo.com/ncaa/basketball/polls?poll=3',
+        rpi     => 'http://sports.yahoo.com/ncaa/basketball/polls?poll=5',
     };
 }
 
